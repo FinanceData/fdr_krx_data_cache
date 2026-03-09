@@ -1,0 +1,64 @@
+name: KRX Data Collection
+
+on:
+  schedule:
+    # 한국시간(KST=UTC+9) 기준 장 마감 후 5분 간격 실행
+    # UTC 00:00 ~ 08:55 = KST 09:00 ~ 17:55 (장중 + 장마감 후)
+    - cron: "*/5 0-8 * * 1-5"   # 평일(월-금) UTC 00:00~08:55 → KST 09:00~17:55
+    - cron: "0 16 * * *"        # 매일(월-일) UTC 16:00 → KST 01:00
+  workflow_dispatch:              # 수동 실행 가능
+
+permissions:
+  contents: write                 # 자동 커밋/푸시를 위한 권한
+
+env:
+  TZ: Asia/Seoul
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # ── 체크아웃 ──
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Python 설정 ──
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # ── uv 설치 및 의존성 설치 ──
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Install dependencies
+        run: uv sync
+
+      # ── 데이터 수집 ──
+      - name: Run data collection
+        env:
+          KRX_ID: ${{ secrets.KRX_ID }}
+          KRX_PW: ${{ secrets.KRX_PW }}
+        run: uv run python main.py
+
+      # ── 변경 사항 커밋 & 푸시 ──
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          # 변경 사항이 있을 때만 커밋
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            DATE=$(date +"%Y-%m-%d %H:%M")
+            git commit -m "data: auto-update ${DATE}"
+            # 최신 remote 변경사항을 rebase로 통합 후 push
+            git pull --rebase origin master
+            git push
+          fi
