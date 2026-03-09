@@ -1,5 +1,5 @@
 # FDR KRX Data Cache
-KRX(한국거래소) 데이터를 자동 수집하여 Git에 CSV로 저장하는 시스템입니다.
+KRX(한국거래소) 데이터를 자동 수집하여 Git에 CSV로 저장하는 시스템
 
 ## 📁 프로젝트 구조
 
@@ -11,7 +11,6 @@ fdr_krx_data_cache/
 │   ├── listing/           # 종목 시세 (KRX, KOSDAQ, 상장폐지)
 │   ├── index/             # 지수 시세 (KS11, KQ11, KS200, KRX-INDEX)
 │   └── snap/              # 스냅샷 데이터
-├── refs/                  # 참고 자료 (변경 금지)
 ├── collectors.py          # 데이터 수집 함수
 ├── config.py              # 설정 및 상수
 ├── krx_auth.py            # KRX 로그인/인증
@@ -38,13 +37,11 @@ uv run python main.py --only index --start 2024-01-01 --end 2024-01-31
 ```
 
 ### GitHub Actions 자동 실행
-
-- **스케줄**: 평일(월~금) KST 09:00~17:55, 5분 간격 자동 실행
+- **스케줄**: 평일(월 ~ 금) KST 09:00 ~ 17:55, 5분 간격 자동 실행
 - **수동 실행**: Actions 탭 → `KRX Data Collection` → `Run workflow`
 
 ## ⚙️ GitHub Secrets 설정
-
-리포지토리 Settings → Secrets and variables → Actions에 다음을 등록하세요:
+리포지토리 Settings → Secrets and variables → Actions에 다음을 등록:
 
 | Secret  | 설명            |
 |---------|----------------|
