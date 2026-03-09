@@ -4,9 +4,9 @@ on:
   schedule:
     # 한국시간(KST=UTC+9) 기준 장 마감 후 5분 간격 실행
     # UTC 00:00 ~ 08:55 = KST 09:00 ~ 17:55 (장중 + 장마감 후)
-    - cron: "*/5 0-8 * * 1-5"   # 평일(월-금) UTC 00:00~08:55 → KST 09:00~17:55
-    - cron: "0 16 * * *"        # 매일(월-일) UTC 16:00 → KST 01:00
-  workflow_dispatch:              # 수동 실행 가능
+    - cron: "*/20 0-8 * * 1-5"   # 평일(월-금) UTC 00:00~08:55 → KST 09:00~17:55
+    - cron: "0 16 * * *"         # 매일(월-일) UTC 16:00 → KST 01:00
+  workflow_dispatch:             # 수동 실행 가능
 
 permissions:
   contents: write                 # 자동 커밋/푸시를 위한 권한
