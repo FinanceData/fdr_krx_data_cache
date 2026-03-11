@@ -405,3 +405,23 @@ def collect_snap(ticker: str) -> pd.DataFrame:
         return df
     else:
         raise NotImplementedError(f'"{ticker}" is not implemented')
+
+        
+def collect_index_list() -> pd.DataFrame:
+    """
+    [11006] 지수목록 조회 (index_list)
+    """
+    url = "http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
+    form_data = {
+        "locale": "ko_KR",
+        "mktsel": "1",
+        "searchText": "",
+        "bld": "dbms/comm/finder/finder_equidx",
+    }
+    logger.info("index_list: fetching index codes")
+    r = session.post(url, data=form_data, timeout=30)
+    j = r.json()
+    df = pd.DataFrame(j["block1"])
+    df = df.sort_values(["full_code", "short_code"])
+    df = df.reset_index(drop=True)
+    return df

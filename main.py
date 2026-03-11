@@ -26,6 +26,7 @@ from config import (
 )
 from collectors import (
     collect_index,
+    collect_index_list,
     collect_krx_index,
     collect_listing_delisting,
     collect_listing_marcap,
@@ -52,16 +53,13 @@ def collect_historical_yearly_indices() -> None:
             # 기본 시작일 설정
             if symbol == "KS200":
                 start_date_str = "1990-01-01"
-            elif symbol in ("KQ11", "KS11", "KRX-INDEX:1001"):
+            elif symbol in ("KQ11", "KS11"):
                 start_date_str = "1995-05-01"
             else:
                 start_date_str = "2000-01-01"
             
             # 저장 폴더 결정
-            if symbol == "KRX-INDEX:1001":
-                sub = "year_krx_index_1001"
-            else:
-                sub = f"year_{normalize_sub_name(symbol)}"
+            sub = f"year_{normalize_sub_name(symbol)}"
                 
             # ── 기존 파일 확인하여 수집 시작일 조정 (SKIP logic) ──
             target_dir = DATA_ROOT / "index" / sub
@@ -148,6 +146,15 @@ def collect_all_indices(start_str: str, end_str: str | None = None) -> None:
 
 def collect_all_snaps(target_date: date) -> None:
     """SnapDataReader 계열 수집 (당일 스냅)"""
+    # ── 지수목록 수집 (index_list) ──
+    try:
+        sub = "index_list"
+        df = collect_index_list()
+        save_csv(df, "snap", sub, target_date)
+        time.sleep(1)
+    except Exception as e:
+        logger.error("snap/index_list 수집 실패: %s", e, exc_info=True)
+
     for ticker in SNAP_TICKERS:
         try:
             sub = normalize_sub_name(ticker)
@@ -200,7 +207,8 @@ def main():
         collect_all_indices(start_str, end_str)
         logger.info("── snap 계열 수집 시작 ──")
         collect_all_snaps(target_date)
-        # kq-yearly는 히스토리 수집이므로 기본 포함시키지 않음 (필요시 수동 실행)
+        logger.info("── year 계열(연도별 누적) 수집 시작 ──")
+        collect_historical_yearly_indices()
 
     logger.info("=" * 60)
     logger.info("수집 완료")
