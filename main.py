@@ -29,6 +29,7 @@ from collectors import (
     collect_index_list,
     collect_krx_index,
     collect_listing_delisting,
+    collect_listing_desc,
     collect_listing_marcap,
     collect_snap,
 )
@@ -53,7 +54,7 @@ def collect_historical_yearly_indices() -> None:
             # 기본 시작일 설정
             if symbol == "KS200":
                 start_date_str = "1990-01-01"
-            elif symbol in ("KQ11", "KS11"):
+            elif symbol in ("KQ11", "KS11", "KRX-DELISTING"):
                 start_date_str = "1995-05-01"
             else:
                 start_date_str = "2000-01-01"
@@ -107,6 +108,8 @@ def collect_all_listings(target_date: date) -> None:
             if market == "KRX-DELISTING":
                 # 상장폐지는 기간 조절이 가능하나 기본적으로 오늘까지 수집
                 df = collect_listing_delisting()
+            elif market == "KRX-DESC":
+                df = collect_listing_desc("KRX")
             else:
                 df = collect_listing_marcap(market)
             save_csv(df, "listing", sub, target_date)

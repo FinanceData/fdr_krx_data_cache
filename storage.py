@@ -148,6 +148,8 @@ def normalize_sub_name(raw: str) -> str:
         return raw.lower()
     if raw == "KRX-DELISTING":
         return "delisting"
+    if raw == "KRX-DESC":
+        return "desc"
 
     # DataReader KRX-INDEX:XXXX
     if raw.startswith("KRX-INDEX:"):

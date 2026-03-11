@@ -189,6 +189,131 @@ def collect_listing_delisting(
     return df
 
 
+def collect_listing_desc(market: str = "KRX") -> pd.DataFrame:
+    """
+    KRX 주식종목 상세정보 수집 (data.krx.co.kr API 기반)
+
+    Finder API 로 종목 기본정보(Code, Name, Market)를 수집하고,
+    KRX STAT API (전종목 시세)에서 업종(Sector) 등 상세정보를 병합합니다.
+
+    Args:
+        market: 'KRX', 'KOSPI', 'KOSDAQ', 'KONEX'
+    """
+    mkt_list = ['KRX', 'KOSPI', 'KOSDAQ', 'KONEX']
+    if market not in mkt_list:
+        raise ValueError(f"market should be one of {mkt_list}")
+
+    logger.info("listing_desc: market=%s", market)
+
+    # ── 0. 최신 거래일 조회 ──
+    trade_date = _get_latest_trade_date()
+    logger.info("listing_desc: trade_date=%s", trade_date)
+
+    # ── 1. KRX 주식종목검색 (Finder, data.krx.co.kr) ──
+    data = {'bld': 'dbms/comm/finder/finder_stkisu'}
+    url_api = 'http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd'
+    r = session.post(url_api, data=data, timeout=30)
+    jo = r.json()
+    df_finder = pd.DataFrame(jo.get('block1', []))
+
+    if df_finder.empty:
+        logger.warning("listing_desc: Finder 데이터 없음")
+        return pd.DataFrame()
+
+    df_finder = df_finder.rename(columns={
+        'full_code': 'FullCode',
+        'short_code': 'Code',
+        'codeName': 'Name',
+        'marketCode': 'MarketCode',
+        'marketName': 'MarketName',
+        'marketEngName': 'Market',
+        'ord1': 'Ord1',
+        'ord2': 'Ord2',
+    })
+    logger.info("listing_desc: Finder %d건 수집", len(df_finder))
+
+    # ── 2. KRX 전종목 시세 (MDCSTAT01501, data.krx.co.kr) ──
+    # 이 API는 collect_listing_marcap에서도 사용하며 안정적으로 동작함
+    stat_data = {
+        'bld': 'dbms/MDC/STAT/standard/MDCSTAT01501',
+        'mktId': 'ALL',
+        'trdDd': trade_date,
+        'share': '1',
+        'money': '1',
+        'csvxls_isNo': 'false',
+    }
+    r = session.post(url_api, data=stat_data, timeout=30)
+    jo = r.json()
+    df_stat = pd.DataFrame(jo.get('OutBlock_1', []))
+
+    df_detail = None
+    if not df_stat.empty:
+        # MDCSTAT01501 컬럼 매핑
+        stat_cols = {
+            'ISU_SRT_CD': 'Code',
+            'ISU_ABBRV': 'Name',
+            'MKT_NM': 'Market',
+            'SECT_TP_NM': 'Sector',       # 소속부 (유가증권시장, 코스닥시장 등)
+            'MKTCAP': 'Marcap',
+            'LIST_SHRS': 'Stocks',
+        }
+        df_stat = df_stat.rename(columns=stat_cols)
+        df_detail = df_stat[['Code', 'Sector']].copy()
+        logger.info("listing_desc: STAT %d건 수집", len(df_detail))
+    else:
+        logger.warning("listing_desc: STAT 데이터 없음")
+
+    # ── 3. KIND (kind.krx.co.kr) - 상세 기업정보 (optional) ──
+    df_kind = None
+    try:
+        ssl._create_default_https_context = ssl._create_unverified_context
+        url_kind = 'http://kind.krx.co.kr/corpgeneral/corpList.do?method=download&searchType=13'
+        headers_kind = {
+            'User-Agent': 'Chrome/78.0.3904.87 Safari/537.36',
+            'Referer': 'https://data.krx.co.kr/contents/MDC/MDI/outerLoader/index.cmd'
+        }
+        r = requests.get(url_kind, headers=headers_kind, timeout=10)
+        dfs = pd.read_html(io.StringIO(r.text), header=0)
+        df_kind = dfs[0]
+        cols_ren = {
+            '회사명': 'Name', '종목코드': 'Code', '업종': 'Industry',
+            '주요제품': 'Products', '상장일': 'ListingDate', '결산월': 'SettleMonth',
+            '대표자명': 'Representative', '홈페이지': 'HomePage', '지역': 'Region',
+        }
+        df_kind = df_kind.rename(columns=cols_ren)
+        df_kind['Code'] = df_kind['Code'].astype(str).str.zfill(6)
+        df_kind['ListingDate'] = pd.to_datetime(df_kind['ListingDate'], errors='coerce')
+        df_kind = df_kind[['Code', 'Industry', 'Products', 'ListingDate',
+                           'SettleMonth', 'Representative', 'HomePage', 'Region']]
+        logger.info("listing_desc: KIND %d건 수집", len(df_kind))
+    except Exception as e:
+        logger.warning("listing_desc: KIND 접근 실패 (%s)", e)
+
+    # ── 4. 병합 ──
+    # Finder 기본 정보
+    merged = df_finder[['Code', 'Name', 'Market']].copy()
+
+    # STAT 정보 병합 (Sector)
+    if df_detail is not None:
+        merged = pd.merge(merged, df_detail, how='left', on='Code')
+    else:
+        merged['Sector'] = None
+
+    # KIND 정보 병합 (Industry, ListingDate, Representative 등)
+    if df_kind is not None:
+        merged = pd.merge(merged, df_kind, how='left', on='Code')
+    else:
+        for col in ['Industry', 'Products', 'ListingDate', 'SettleMonth',
+                     'Representative', 'HomePage', 'Region']:
+            merged[col] = None
+
+    if market in ['KONEX', 'KOSDAQ', 'KOSPI']:
+        merged = merged[merged['Market'] == market].reset_index(drop=True)
+    merged = merged.drop_duplicates(subset='Code').reset_index(drop=True)
+    logger.info("listing_desc: 최종 %d건 (market=%s)", len(merged), market)
+    return merged
+
+
 # ════════════════════════════════════════════════════════════════
 #  2. DataReader 계열 - 지수 (index/)
 #

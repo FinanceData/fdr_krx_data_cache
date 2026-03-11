@@ -25,7 +25,7 @@ KRX_HEADERS = {
 
 # ── 수집 대상 정의 ──
 # StockListing 수집 대상
-LISTING_MARKETS = ["KRX", "KOSDAQ", "KRX-DELISTING"]
+LISTING_MARKETS = ["KRX", "KOSDAQ", "KRX-DELISTING", "KRX-DESC"]
 
 # DataReader 지수 수집 대상
 INDEX_SYMBOLS = ["KS11", "KQ11", "KS200"]
