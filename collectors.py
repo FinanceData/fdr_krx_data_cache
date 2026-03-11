@@ -152,7 +152,7 @@ def _krx_delisting_2years(from_date: datetime, to_date: datetime) -> pd.DataFram
 
 
 def collect_listing_delisting(
-    start: str = "2020-01-01", end: str | None = None
+    start: str = "1960-01-01", end: str | None = None
 ) -> pd.DataFrame:
     """
     KRX 상장폐지 종목 수집
