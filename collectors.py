@@ -33,12 +33,13 @@ def _get_latest_trade_date() -> str:
     return j["result"]["output"][0]["max_work_dt"]
 
 
-def collect_listing_marcap(market: str) -> pd.DataFrame:
+def collect_listing_marcap(market: str, target_date: date | str | None = None) -> pd.DataFrame:
     """
     종목 시세 (시가총액 기준) 수집
 
     Args:
         market: 'KRX'(전체), 'KOSPI', 'KOSDAQ', 'KONEX'
+        target_date: 수집 대상 일자
 
     Returns:
         DataFrame with columns: Code, Name, Close, Dept, Changes, ChagesRatio,
@@ -48,7 +49,13 @@ def collect_listing_marcap(market: str) -> pd.DataFrame:
     if market not in mkt_map:
         raise ValueError(f"market should be one of {list(mkt_map.keys())}")
 
-    date_str = _get_latest_trade_date()
+    if target_date is None:
+        date_str = _get_latest_trade_date()
+    elif isinstance(target_date, date):
+        date_str = target_date.strftime("%Y%m%d")
+    else:
+        date_str = str(target_date).replace("-", "")
+
     logger.info("listing_marcap: market=%s, trade_date=%s", market, date_str)
 
     url = "https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
@@ -189,7 +196,7 @@ def collect_listing_delisting(
     return df
 
 
-def collect_listing_desc(market: str = "KRX") -> pd.DataFrame:
+def collect_listing_desc(market: str = "KRX", target_date: date | str | None = None) -> pd.DataFrame:
     """
     KRX 주식종목 상세정보 수집 (data.krx.co.kr API 기반)
 
@@ -198,6 +205,7 @@ def collect_listing_desc(market: str = "KRX") -> pd.DataFrame:
 
     Args:
         market: 'KRX', 'KOSPI', 'KOSDAQ', 'KONEX'
+        target_date: 수집 대상 일자
     """
     mkt_list = ['KRX', 'KOSPI', 'KOSDAQ', 'KONEX']
     if market not in mkt_list:
@@ -205,8 +213,14 @@ def collect_listing_desc(market: str = "KRX") -> pd.DataFrame:
 
     logger.info("listing_desc: market=%s", market)
 
-    # ── 0. 최신 거래일 조회 ──
-    trade_date = _get_latest_trade_date()
+    # ── 0. 거래일 조회 ──
+    if target_date is None:
+        trade_date = _get_latest_trade_date()
+    elif isinstance(target_date, date):
+        trade_date = target_date.strftime("%Y%m%d")
+    else:
+        trade_date = str(target_date).replace("-", "")
+
     logger.info("listing_desc: trade_date=%s", trade_date)
 
     # ── 1. KRX 주식종목검색 (Finder, data.krx.co.kr) ──

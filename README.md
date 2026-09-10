@@ -9,8 +9,8 @@ fdr_krx_data_cache/
 │   └── collect.yml        # GitHub Actions 자동 수집 워크플로우
 ├── data/                  # 수집된 CSV 데이터 (자동 생성)
 │   ├── listing/           # 종목 시세 및 정보
-│   │   ├── krx/           # KRX 종목 시세
-│   │   ├── kosdaq/        # KOSDAQ 종목 시세
+│   │   ├── krx/           # KRX 종목 목록
+│   │   ├── kosdaq/        # KOSDAQ 종목 목록
 │   │   ├── delisting/     # 상장폐지 종목 목록
 │   │   └── desc/          # 기업 상세 정보 (업종, 상장일, 대표자 등)
 │   ├── index/             # 지수 시세

@@ -14,7 +14,7 @@ import argparse
 import logging
 import sys
 import time
-from datetime import date
+from datetime import date, timedelta
 
 from config import (
     DATA_ROOT,
@@ -100,22 +100,28 @@ def collect_historical_yearly_indices() -> None:
             logger.error("yearly_index/%s 수집 실패: %s", symbol, e, exc_info=True)
 
 
-def collect_all_listings(target_date: date) -> None:
-    """StockListing 계열 수집 (오늘/기준일 기준)"""
-    for market in LISTING_MARKETS:
-        try:
-            sub = normalize_sub_name(market)
-            if market == "KRX-DELISTING":
-                # 상장폐지는 기간 조절이 가능하나 기본적으로 오늘까지 수집
-                df = collect_listing_delisting()
-            elif market == "KRX-DESC":
-                df = collect_listing_desc("KRX")
-            else:
-                df = collect_listing_marcap(market)
-            save_csv(df, "listing", sub, target_date)
-            time.sleep(1)
-        except Exception as e:
-            logger.error("listing/%s 수집 실패: %s", market, e, exc_info=True)
+def collect_all_listings(start_str: str, end_str: str | None = None) -> None:
+    """StockListing 계열 수집 (기간별 수집)"""
+    start_dt = date.fromisoformat(start_str)
+    end_dt = date.fromisoformat(end_str) if end_str else start_dt
+
+    current_dt = start_dt
+    while current_dt <= end_dt:
+        logger.info("── listing 계열 수집 (기준일: %s) ──", current_dt.isoformat())
+        for market in LISTING_MARKETS:
+            try:
+                sub = normalize_sub_name(market)
+                if market == "KRX-DELISTING":
+                    df = collect_listing_delisting(end=current_dt.isoformat())
+                elif market == "KRX-DESC":
+                    df = collect_listing_desc("KRX", target_date=current_dt)
+                else:
+                    df = collect_listing_marcap(market, target_date=current_dt)
+                save_csv(df, "listing", sub, current_dt)
+                time.sleep(1)
+            except Exception as e:
+                logger.error("listing/%s 수집 실패 (기준일 %s): %s", market, current_dt.isoformat(), e, exc_info=True)
+        current_dt += timedelta(days=1)
 
 
 def collect_all_indices(start_str: str, end_str: str | None = None) -> None:
@@ -196,7 +202,7 @@ def main():
 
     # ── 수집 실행 ──
     if args.only == "listing":
-        collect_all_listings(target_date)
+        collect_all_listings(start_str, end_str)
     elif args.only == "index":
         collect_all_indices(start_str, end_str)
     elif args.only == "snap":
@@ -205,7 +211,7 @@ def main():
         collect_historical_yearly_indices()
     elif not args.only:
         logger.info("── listing 계열 수집 시작 ──")
-        collect_all_listings(target_date)
+        collect_all_listings(start_str, end_str)
         logger.info("── index 계열 수집 시작 ──")
         collect_all_indices(start_str, end_str)
         logger.info("── snap 계열 수집 시작 ──")
