@@ -40,13 +40,14 @@ uv run python main.py --only index       # 지수 시세 (일별)
 uv run python main.py --only snap        # 스냅샷 (지수구성종목)
 uv run python main.py --only kq-yearly   # 지수 연도별 누적 데이터 (히스토리)
 
-# 기간별 수집 (index 카테고리 권장)
+# 기간별 수집 (listing, index 등)
 # 시작일~종료일 데이터를 수집하여 각 일자별 파일로 자동 분할 저장합니다.
+uv run python main.py --only listing --start 2026-09-08 --end 2026-09-10
 uv run python main.py --only index --start 2024-01-01 --end 2024-01-31
 ```
 
 ### GitHub Actions 자동 실행
-- **스케줄**: 평일(월 ~ 금) KST 09:00 ~ 17:55, 5분 간격 자동 실행
+- **스케줄**: 평일(월 ~ 금) KST 09:00 ~ 17:55, 10분 간격 자동 실행
 - **수동 실행**: Actions 탭 → `KRX Data Collection` → `Run workflow`
 
 ## ⚙️ GitHub Secrets 설정
