@@ -21,6 +21,7 @@ from config import (
     INDEX_SYMBOLS,
     KRX_INDEX_SYMBOLS,
     LISTING_MARKETS,
+    REQUEST_DELAY,
     SNAP_TICKERS,
     YEARLY_INDEX_SYMBOLS,
 )
@@ -45,9 +46,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def collect_historical_yearly_indices() -> None:
+def collect_historical_yearly_indices() -> bool:
     """특정 지수의 연도별 데이터 수집 (예: KQ11, KRX-INDEX:1001 1995-05-01 ~)"""
     current_year = date.today().year
+    success = True
     
     for symbol in YEARLY_INDEX_SYMBOLS:
         try:
@@ -95,15 +97,18 @@ def collect_historical_yearly_indices() -> None:
             if not df.empty:
                 logger.info("[%s] %d 건 수집 완료", symbol, len(df))
                 save_csv_by_year(df, "index", sub)
-            time.sleep(1)
+            time.sleep(REQUEST_DELAY)
         except Exception as e:
             logger.error("yearly_index/%s 수집 실패: %s", symbol, e, exc_info=True)
+            success = False
+    return success
 
 
-def collect_all_listings(start_str: str, end_str: str | None = None) -> None:
+def collect_all_listings(start_str: str, end_str: str | None = None) -> bool:
     """StockListing 계열 수집 (기간별 수집)"""
     start_dt = date.fromisoformat(start_str)
     end_dt = date.fromisoformat(end_str) if end_str else start_dt
+    success = True
 
     current_dt = start_dt
     while current_dt <= end_dt:
@@ -118,15 +123,18 @@ def collect_all_listings(start_str: str, end_str: str | None = None) -> None:
                 else:
                     df = collect_listing_marcap(market, target_date=current_dt)
                 save_csv(df, "listing", sub, current_dt)
-                time.sleep(1)
+                time.sleep(REQUEST_DELAY)
             except Exception as e:
                 logger.error("listing/%s 수집 실패 (기준일 %s): %s", market, current_dt.isoformat(), e, exc_info=True)
+                success = False
         current_dt += timedelta(days=1)
+    return success
 
 
-def collect_all_indices(start_str: str, end_str: str | None = None) -> None:
+def collect_all_indices(start_str: str, end_str: str | None = None) -> bool:
     """DataReader 지수 계열 수집 (기간별 분할 저장)"""
     is_single_day = (end_str is None) or (start_str == end_str)
+    success = True
     
     for symbol in INDEX_SYMBOLS:
         try:
@@ -136,9 +144,10 @@ def collect_all_indices(start_str: str, end_str: str | None = None) -> None:
                 save_csv(df, "index", sub, date.fromisoformat(start_str))
             else:
                 save_csv_by_day(df, "index", sub)
-            time.sleep(1)
+            time.sleep(REQUEST_DELAY)
         except Exception as e:
             logger.error("index/%s 수집 실패: %s", symbol, e, exc_info=True)
+            success = False
 
     for symbol in KRX_INDEX_SYMBOLS:
         try:
@@ -148,30 +157,36 @@ def collect_all_indices(start_str: str, end_str: str | None = None) -> None:
                 save_csv(df, "index", sub, date.fromisoformat(start_str))
             else:
                 save_csv_by_day(df, "index", sub)
-            time.sleep(1)
+            time.sleep(REQUEST_DELAY)
         except Exception as e:
             logger.error("index/%s 수집 실패: %s", symbol, e, exc_info=True)
+            success = False
+    return success
 
 
-def collect_all_snaps(target_date: date) -> None:
+def collect_all_snaps(target_date: date) -> bool:
     """SnapDataReader 계열 수집 (당일 스냅)"""
+    success = True
     # ── 지수목록 수집 (index_list) ──
     try:
         sub = "index_list"
         df = collect_index_list()
         save_csv(df, "snap", sub, target_date)
-        time.sleep(1)
+        time.sleep(REQUEST_DELAY)
     except Exception as e:
         logger.error("snap/index_list 수집 실패: %s", e, exc_info=True)
+        success = False
 
     for ticker in SNAP_TICKERS:
         try:
             sub = normalize_sub_name(ticker)
             df = collect_snap(ticker)
             save_csv(df, "snap", sub, target_date)
-            time.sleep(1)
+            time.sleep(REQUEST_DELAY)
         except Exception as e:
             logger.error("snap/%s 수집 실패: %s", ticker, e, exc_info=True)
+            success = False
+    return success
 
 
 def main():
@@ -200,28 +215,34 @@ def main():
         logger.critical("KRX 로그인 실패 → 수집 중단")
         sys.exit(1)
 
+    all_success = True
+
     # ── 수집 실행 ──
     if args.only == "listing":
-        collect_all_listings(start_str, end_str)
+        all_success = collect_all_listings(start_str, end_str) and all_success
     elif args.only == "index":
-        collect_all_indices(start_str, end_str)
+        all_success = collect_all_indices(start_str, end_str) and all_success
     elif args.only == "snap":
-        collect_all_snaps(target_date)
+        all_success = collect_all_snaps(target_date) and all_success
     elif args.only == "kq-yearly":
-        collect_historical_yearly_indices()
+        all_success = collect_historical_yearly_indices() and all_success
     elif not args.only:
         logger.info("── listing 계열 수집 시작 ──")
-        collect_all_listings(start_str, end_str)
+        all_success = collect_all_listings(start_str, end_str) and all_success
         logger.info("── index 계열 수집 시작 ──")
-        collect_all_indices(start_str, end_str)
+        all_success = collect_all_indices(start_str, end_str) and all_success
         logger.info("── snap 계열 수집 시작 ──")
-        collect_all_snaps(target_date)
+        all_success = collect_all_snaps(target_date) and all_success
         logger.info("── year 계열(연도별 누적) 수집 시작 ──")
-        collect_historical_yearly_indices()
+        all_success = collect_historical_yearly_indices() and all_success
 
     logger.info("=" * 60)
+    if not all_success:
+        logger.error("데이터 수집 중 일부 항목 실패")
+        sys.exit(1)
     logger.info("수집 완료")
     logger.info("=" * 60)
+
 
 
 if __name__ == "__main__":

@@ -8,11 +8,13 @@ import io
 import json
 import logging
 import ssl
+import time
 from datetime import date, datetime, timedelta
 
 import pandas as pd
 import requests
 
+from config import REQUEST_DELAY
 from krx_auth import session
 
 logger = logging.getLogger(__name__)
@@ -25,7 +27,7 @@ logger = logging.getLogger(__name__)
 def _get_latest_trade_date() -> str:
     """KRX에서 최신 거래일 문자열(YYYYMMDD)을 가져옵니다."""
     url = (
-        "http://data.krx.co.kr/comm/bldAttendant/executeForResourceBundle.cmd"
+        "https://data.krx.co.kr/comm/bldAttendant/executeForResourceBundle.cmd"
         "?baseName=krx.mdc.i18n.component&key=B128.bld"
     )
     r = session.get(url, timeout=15)
@@ -120,7 +122,7 @@ def _krx_delisting_2years(from_date: datetime, to_date: datetime) -> pd.DataFram
         "share": "1",
         "csvxls_isNo": "true",
     }
-    url = "http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
+    url = "https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
     r = session.post(url, data=data, timeout=30)
     jo = r.json()
     df = pd.DataFrame(jo["output"])
@@ -182,6 +184,7 @@ def collect_listing_delisting(
         df_list.append(df)
         if to_date <= _end:
             break
+        time.sleep(REQUEST_DELAY)
         _start = _end + timedelta(days=1)
         _end = datetime(_start.year + 2, _start.month, _start.day) - timedelta(days=1)
 
@@ -225,7 +228,7 @@ def collect_listing_desc(market: str = "KRX", target_date: date | str | None = N
 
     # ── 1. KRX 주식종목검색 (Finder, data.krx.co.kr) ──
     data = {'bld': 'dbms/comm/finder/finder_stkisu'}
-    url_api = 'http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd'
+    url_api = 'https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd'
     r = session.post(url_api, data=data, timeout=30)
     jo = r.json()
     df_finder = pd.DataFrame(jo.get('block1', []))
@@ -350,7 +353,7 @@ def _krx_index_price_2years(
     idx1: str, idx2: str, from_dt: datetime, to_dt: datetime
 ) -> pd.DataFrame:
     """KRX 지수 시세 (최대 2 년 단위 호출)"""
-    url = "http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
+    url = "https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
     data = {
         "bld": "dbms/MDC/STAT/standard/MDCSTAT00301",
         "indIdx": idx1,
@@ -395,6 +398,7 @@ def collect_index(symbol: str, start: str, end: str | None = None) -> pd.DataFra
         df_list.append(df)
         if to_dt <= _end:
             break
+        time.sleep(REQUEST_DELAY)
         _start = _end + timedelta(days=1)
 
     df = pd.concat(df_list, ignore_index=True)
@@ -444,6 +448,7 @@ def collect_krx_index(symbol: str, start: str, end: str | None = None) -> pd.Dat
         df_list.append(df)
         if to_dt <= _end:
             break
+        time.sleep(REQUEST_DELAY)
         _start = _end + timedelta(days=1)
 
     df = pd.concat(df_list, ignore_index=True)
@@ -479,7 +484,7 @@ def _krx_last_working_day(dt: date | None = None) -> datetime:
     date_val = pd.to_datetime(dt) if dt else pd.Timestamp.today()
     date_str = date_val.strftime("%Y%m%d")
     url = (
-        "http://data.krx.co.kr/comm/bldAttendant/executeForResourceBundle.cmd"
+        "https://data.krx.co.kr/comm/bldAttendant/executeForResourceBundle.cmd"
         f"?baseName=krx.mdc.i18n.component&key=B161.bld&inDate={date_str}"
     )
     r = session.get(url, timeout=15)
@@ -497,7 +502,7 @@ def _krx_index_listings(idx1: str, idx2: str, dt: date | None = None) -> pd.Data
         dt: 기준일
     """
     end = _krx_last_working_day(dt)
-    url = "http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
+    url = "https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
     form_data = {
         "bld": "dbms/MDC/STAT/standard/MDCSTAT00601",
         "indIdx": idx1,
@@ -550,7 +555,7 @@ def collect_index_list() -> pd.DataFrame:
     """
     [11006] 지수목록 조회 (index_list)
     """
-    url = "http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
+    url = "https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
     form_data = {
         "locale": "ko_KR",
         "mktsel": "1",

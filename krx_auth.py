@@ -30,7 +30,7 @@ def login(login_id: str = KRX_ID, login_pw: str = KRX_PW) -> bool:
         # 1. 세션 기본 초기화 (Cookie 발급)
         # 이 단계만으로도 많은 공용 API (Finder 등) 사용 가능
         init_url = (
-            "http://data.krx.co.kr/comm/bldAttendant/executeForResourceBundle.cmd"
+            "https://data.krx.co.kr/comm/bldAttendant/executeForResourceBundle.cmd"
             "?baseName=krx.mdc.i18n.component&key=B128.bld"
         )
         session.get(init_url, timeout=15)
@@ -81,12 +81,10 @@ def login(login_id: str = KRX_ID, login_pw: str = KRX_PW) -> bool:
             logger.info("KRX 회원 로그인 성공")
             return True
         else:
-            logger.warning("KRX 회원 로그인 실패 (error_code=%s). 익명 세션으로 계속 진행합니다.", error_code)
-            # 로그인은 실패했지만, 위에서 쿠키는 받았으므로 공용 데이터 수집은 가능할 수 있음
-            return True
+            logger.error("KRX 회원 로그인 실패 (error_code=%s)", error_code)
+            return False
 
     except Exception as e:
         logger.error("KRX 인증 중 예외 발생: %s", e)
-        # 예외 발생 시에도 세션 초기화는 시도한 것이므로 True를 반환하여 
-        # 수집기들이 수집을 시도해볼 수 있게 함 (KIND 등은 개별적으로 작동함)
-        return True
+        return False
+

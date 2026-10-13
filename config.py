@@ -14,6 +14,9 @@ DATA_ROOT = PROJECT_ROOT / "data"
 KRX_ID = os.environ.get("KRX_ID", "id")
 KRX_PW = os.environ.get("KRX_PW", "pw")
 
+# ── 요청 딜레이 (IP 차단 및 Rate Limiting 방지, 초 단위) ──
+REQUEST_DELAY = float(os.environ.get("REQUEST_DELAY", "2.5"))
+
 # ── 공통 헤더 ──
 KRX_HEADERS = {
     "User-Agent": (
