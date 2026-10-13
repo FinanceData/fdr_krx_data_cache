@@ -35,7 +35,7 @@ from collectors import (
     collect_snap,
 )
 from krx_auth import login
-from storage import normalize_sub_name, save_csv, save_csv_by_day, save_csv_by_year
+from storage import get_csv_path, normalize_sub_name, save_csv, save_csv_by_day, save_csv_by_year
 
 # ── 로깅 설정 ──
 logging.basicConfig(
@@ -108,16 +108,31 @@ def collect_all_listings(start_str: str, end_str: str | None = None) -> bool:
     """StockListing 계열 수집 (기간별 수집)"""
     start_dt = date.fromisoformat(start_str)
     end_dt = date.fromisoformat(end_str) if end_str else start_dt
+    today_dt = date.today()
     success = True
+
+    # 1960년부터 누적되는 DELISTING 데이터 메모리 캐시 (세션 내 반복 호출 방지)
+    cached_delisting_df = None
 
     current_dt = start_dt
     while current_dt <= end_dt:
         logger.info("── listing 계열 수집 (기준일: %s) ──", current_dt.isoformat())
         for market in LISTING_MARKETS:
+            sub = normalize_sub_name(market)
+            target_path = get_csv_path("listing", sub, current_dt)
+
+            # 이미 과거 데이터 파일이 존재하면 API 호출 및 딜레이 자체를 건너뜀 (대폭 최적화)
+            if current_dt != today_dt and target_path.exists():
+                logger.info("listing/%s: 과거 데이터 존재 → 수집 건너뜀 (%s)", market, target_path.name)
+                continue
+
             try:
-                sub = normalize_sub_name(market)
                 if market == "KRX-DELISTING":
-                    df = collect_listing_delisting(end=current_dt.isoformat())
+                    if cached_delisting_df is None:
+                        # 오늘 또는 대상 기간 끝까지 한 번만 수집
+                        cached_delisting_df = collect_listing_delisting(end=end_dt.isoformat())
+                    # 해당 기준일까지 폐지된 종목 필터링
+                    df = cached_delisting_df[cached_delisting_df["DelistingDate"] <= pd.to_datetime(current_dt)].copy()
                 elif market == "KRX-DESC":
                     df = collect_listing_desc("KRX", target_date=current_dt)
                 else:
@@ -167,19 +182,29 @@ def collect_all_indices(start_str: str, end_str: str | None = None) -> bool:
 def collect_all_snaps(target_date: date) -> bool:
     """SnapDataReader 계열 수집 (당일 스냅)"""
     success = True
+    today_dt = date.today()
+
     # ── 지수목록 수집 (index_list) ──
-    try:
-        sub = "index_list"
-        df = collect_index_list()
-        save_csv(df, "snap", sub, target_date)
-        time.sleep(REQUEST_DELAY)
-    except Exception as e:
-        logger.error("snap/index_list 수집 실패: %s", e, exc_info=True)
-        success = False
+    sub = "index_list"
+    target_path = get_csv_path("snap", sub, target_date)
+    if target_date != today_dt and target_path.exists():
+        logger.info("snap/%s: 과거 데이터 존재 → 수집 건너뜀 (%s)", sub, target_path.name)
+    else:
+        try:
+            df = collect_index_list()
+            save_csv(df, "snap", sub, target_date)
+            time.sleep(REQUEST_DELAY)
+        except Exception as e:
+            logger.error("snap/index_list 수집 실패: %s", e, exc_info=True)
+            success = False
 
     for ticker in SNAP_TICKERS:
+        sub = normalize_sub_name(ticker)
+        target_path = get_csv_path("snap", sub, target_date)
+        if target_date != today_dt and target_path.exists():
+            logger.info("snap/%s: 과거 데이터 존재 → 수집 건너뜀 (%s)", ticker, target_path.name)
+            continue
         try:
-            sub = normalize_sub_name(ticker)
             df = collect_snap(ticker)
             save_csv(df, "snap", sub, target_date)
             time.sleep(REQUEST_DELAY)
