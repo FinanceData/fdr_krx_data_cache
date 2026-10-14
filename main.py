@@ -16,6 +16,8 @@ import sys
 import time
 from datetime import date, timedelta
 
+import pandas as pd
+
 from config import (
     DATA_ROOT,
     INDEX_SYMBOLS,
