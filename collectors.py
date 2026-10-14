@@ -564,18 +564,19 @@ def _krx_index_listings(idx1: str, idx2: str, dt: date | None = None) -> pd.Data
     return df
 
 
-def collect_snap(ticker: str) -> pd.DataFrame:
+def collect_snap(ticker: str, dt: date | None = None) -> pd.DataFrame:
     """
     스냅 데이터 수집
 
     Args:
         ticker: 'KRX/INDEX/STOCK/1001' 형식
+        dt: 기준일
     """
-    logger.info("snap: ticker=%s", ticker)
+    logger.info("snap: ticker=%s, date=%s", ticker, dt)
 
     if ticker.startswith("KRX/INDEX/STOCK/"):
         code = ticker.split("/")[-1]
-        df = _krx_index_listings(code[0], code[1:])
+        df = _krx_index_listings(code[0], code[1:], dt=dt)
         return df
     else:
         raise NotImplementedError(f'"{ticker}" is not implemented')

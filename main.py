@@ -181,38 +181,43 @@ def collect_all_indices(start_str: str, end_str: str | None = None) -> bool:
     return success
 
 
-def collect_all_snaps(target_date: date) -> bool:
-    """SnapDataReader 계열 수집 (당일 스냅)"""
-    success = True
+def collect_all_snaps(start_str: str, end_str: str | None = None) -> bool:
+    """SnapDataReader 계열 수집 (기간별 분할 저장)"""
+    start_dt = date.fromisoformat(start_str)
+    end_dt = date.fromisoformat(end_str) if end_str else start_dt
     today_dt = date.today()
+    success = True
 
-    # ── 지수목록 수집 (index_list) ──
-    sub = "index_list"
-    target_path = get_csv_path("snap", sub, target_date)
-    if target_date != today_dt and target_path.exists():
-        logger.info("snap/%s: 과거 데이터 존재 → 수집 건너뜀 (%s)", sub, target_path.name)
-    else:
-        try:
-            df = collect_index_list()
-            save_csv(df, "snap", sub, target_date)
-            time.sleep(REQUEST_DELAY)
-        except Exception as e:
-            logger.error("snap/index_list 수집 실패: %s", e, exc_info=True)
-            success = False
+    current_dt = start_dt
+    while current_dt <= end_dt:
+        # ── 지수목록 수집 (index_list) ──
+        sub = "index_list"
+        target_path = get_csv_path("snap", sub, current_dt)
+        if current_dt != today_dt and target_path.exists():
+            pass  # 이미 존재하면 스킵
+        else:
+            try:
+                df = collect_index_list()
+                save_csv(df, "snap", sub, current_dt)
+                time.sleep(REQUEST_DELAY)
+            except Exception as e:
+                logger.error("snap/index_list 수집 실패 (기준일 %s): %s", current_dt.isoformat(), e, exc_info=True)
+                success = False
 
-    for ticker in SNAP_TICKERS:
-        sub = normalize_sub_name(ticker)
-        target_path = get_csv_path("snap", sub, target_date)
-        if target_date != today_dt and target_path.exists():
-            logger.info("snap/%s: 과거 데이터 존재 → 수집 건너뜀 (%s)", ticker, target_path.name)
-            continue
-        try:
-            df = collect_snap(ticker)
-            save_csv(df, "snap", sub, target_date)
-            time.sleep(REQUEST_DELAY)
-        except Exception as e:
-            logger.error("snap/%s 수집 실패: %s", ticker, e, exc_info=True)
-            success = False
+        for ticker in SNAP_TICKERS:
+            sub = normalize_sub_name(ticker)
+            target_path = get_csv_path("snap", sub, current_dt)
+            if current_dt != today_dt and target_path.exists():
+                continue
+            try:
+                df = collect_snap(ticker, dt=current_dt)
+                save_csv(df, "snap", sub, current_dt)
+                time.sleep(REQUEST_DELAY)
+            except Exception as e:
+                logger.error("snap/%s 수집 실패 (기준일 %s): %s", ticker, current_dt.isoformat(), e, exc_info=True)
+                success = False
+        current_dt += timedelta(days=1)
+
     return success
 
 
@@ -250,7 +255,7 @@ def main():
     elif args.only == "index":
         all_success = collect_all_indices(start_str, end_str) and all_success
     elif args.only == "snap":
-        all_success = collect_all_snaps(target_date) and all_success
+        all_success = collect_all_snaps(start_str, end_str) and all_success
     elif args.only == "kq-yearly":
         all_success = collect_historical_yearly_indices() and all_success
     elif not args.only:
@@ -259,7 +264,7 @@ def main():
         logger.info("── index 계열 수집 시작 ──")
         all_success = collect_all_indices(start_str, end_str) and all_success
         logger.info("── snap 계열 수집 시작 ──")
-        all_success = collect_all_snaps(target_date) and all_success
+        all_success = collect_all_snaps(start_str, end_str) and all_success
         logger.info("── year 계열(연도별 누적) 수집 시작 ──")
         all_success = collect_historical_yearly_indices() and all_success
 
