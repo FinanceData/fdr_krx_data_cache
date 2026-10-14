@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 import pandas as pd
 import requests
 
-from config import REQUEST_DELAY
+from config import DATA_ROOT, REQUEST_DELAY
 from krx_auth import session
 
 logger = logging.getLogger(__name__)
@@ -165,13 +165,38 @@ def collect_listing_delisting(
 ) -> pd.DataFrame:
     """
     KRX 상장폐지 종목 수집
-
-    Args:
-        start: 시작일 (YYYY-MM-DD)
-        end: 종료일 (기본=오늘)
+    
+    기존에 수집된 최신 delisting CSV가 있다면 이를 기반으로 시작일을 조정하여
+    1960년부터 수십 회 반복 호출하는 극심한 비효율을 방지합니다.
     """
     from_date = pd.to_datetime(start)
     to_date = pd.to_datetime(end) if end else datetime.today()
+
+    # ── 기존 파일 활용 최적화 ──
+    delist_dir = DATA_ROOT / "listing" / "delisting"
+    base_df = None
+    if delist_dir.exists():
+        existing_files = sorted([f for f in delist_dir.glob("*.csv") if f.name != f"{to_date.date().isoformat()}.csv"])
+        if existing_files:
+            latest_file = existing_files[-1]
+            try:
+                base_df = pd.read_csv(latest_file, index_col=0)
+                base_df["DelistingDate"] = pd.to_datetime(base_df["DelistingDate"])
+                max_delist_dt = base_df["DelistingDate"].max()
+                if pd.notna(max_delist_dt) and max_delist_dt >= from_date:
+                    # 기존 데이터의 최대 상장폐지일 다음날부터만 신규 증분 조회
+                    new_start = max_delist_dt + timedelta(days=1)
+                    if new_start > to_date:
+                        # 이미 기존 파일에 대상 기간 상장폐지 종목이 모두 포함되어 있음
+                        filtered = base_df[(base_df["DelistingDate"] <= to_date)].copy()
+                        logger.info("listing_delisting: 기존 파일(%s) 재사용 완료 (%d건, API 호출 0회)", latest_file.name, len(filtered))
+                        return filtered.reset_index(drop=True)
+                    else:
+                        from_date = new_start
+                        logger.info("listing_delisting: 기존 파일(%s) 기반 증분 수집 시작 (%s ~ %s)", latest_file.name, from_date.date(), to_date.date())
+            except Exception as e:
+                logger.warning("listing_delisting: 기존 파일 읽기 실패 (%s), 전체 수집 진행", e)
+                base_df = None
 
     logger.info("listing_delisting: %s ~ %s", from_date.date(), to_date.date())
 
@@ -188,15 +213,20 @@ def collect_listing_delisting(
         _start = _end + timedelta(days=1)
         _end = datetime(_start.year + 2, _start.month, _start.day) - timedelta(days=1)
 
-    df = pd.concat(df_list, ignore_index=True)
-    if df.empty:
-        logger.warning("listing_delisting: 데이터 없음")
-        return df
+    new_df = pd.concat(df_list, ignore_index=True)
+    if base_df is not None and not base_df.empty:
+        merged_df = pd.concat([base_df, new_df], ignore_index=True).drop_duplicates(subset=["Symbol"]).reset_index(drop=True)
+    else:
+        merged_df = new_df
 
-    df = df[
-        (from_date <= df["DelistingDate"]) & (df["DelistingDate"] <= to_date)
+    if merged_df.empty:
+        logger.warning("listing_delisting: 데이터 없음")
+        return merged_df
+
+    merged_df = merged_df[
+        (merged_df["DelistingDate"] <= to_date)
     ].reset_index(drop=True)
-    return df
+    return merged_df
 
 
 def collect_listing_desc(market: str = "KRX", target_date: date | str | None = None) -> pd.DataFrame:
